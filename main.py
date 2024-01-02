@@ -25,7 +25,191 @@ df["Star3"] = merged_df["Field5_text"]
 df["EpisodeCount"] = merged2_df["Field3"]
 
 df.columns.tolist()
+##############
+# Veri İnceleme - Kontrol Aşaması
+##############
 
+def check_df(dataframe, head=5, tail=5, quan=False):
+    print("##################### İnfo #####################")
+    print(dataframe.info())
+    print("##################### Shape #####################")
+    print(dataframe.shape)
+    print("##################### Types #####################")
+    print(dataframe.dtypes)
+    print("##################### Head #####################")
+    print(dataframe.head(head))
+    print("##################### Tail #####################")
+    print(dataframe.tail(tail))
+    print("##################### NA #####################")
+    print(dataframe.isnull().sum())
+
+    if quan:
+        print("##################### Quantiles #####################")
+        print(dataframe.quantile([0, 0.05, 0.50, 0.95, 0.99, 1]).T)
+
+check_df(df, quan=True)
+
+df.isnull().sum()
+
+missing_percentage = df.isnull().sum() * 100 / len(df)
+
+def grab_col_names(dataframe, cat_th=5, car_th=20):
+    """
+    grab_col_names for given dataframe
+
+    :param dataframe:
+    :param cat_th:
+    :param car_th:
+    :return:
+    """
+
+    cat_cols = [col for col in dataframe.columns if dataframe[col].dtypes == "O"]
+
+    num_but_cat = [col for col in dataframe.columns if dataframe[col].nunique() < cat_th and
+                   dataframe[col].dtypes != "O"]
+
+    cat_but_car = [col for col in dataframe.columns if dataframe[col].nunique() > car_th and
+                   dataframe[col].dtypes == "O"]
+
+    cat_cols = cat_cols + num_but_cat
+    cat_cols = [col for col in cat_cols if col not in cat_but_car]
+
+    num_cols = [col for col in dataframe.columns if dataframe[col].dtypes != "O"]
+    num_cols = [col for col in num_cols if col not in num_but_cat]
+
+    print(f"Observations: {dataframe.shape[0]}")
+    print(f"Variables: {dataframe.shape[1]}")
+    print(f'cat_cols: {len(cat_cols)}')
+    print(f'num_cols: {len(num_cols)}')
+    print(f'cat_but_car: {len(cat_but_car)}')
+    print(f'num_but_cat: {len(num_but_cat)}')
+
+    # cat_cols + num_cols + cat_but_car = değişken sayısı.
+    # num_but_cat cat_cols'un içerisinde zaten.
+    # dolayısıyla tüm şu 3 liste ile tüm değişkenler seçilmiş olacaktır: cat_cols + num_cols + cat_but_car
+    # num_but_cat sadece raporlama için verilmiştir.
+
+    return cat_cols, cat_but_car, num_cols
+
+cat_cols, cat_but_car, num_cols = grab_col_names(df)
+
+###### Boş değerleri doldurma, Veri düzenleme
+
+df['Age'] = pd.to_numeric(df['Age'], errors='coerce')
+df['Age'].fillna(7, inplace=True)
+# df['Age'] = df['Age'].str.extract('(\d+)')
+
+df.dropna(subset=['Years'], inplace=True)
+df.dropna(subset=['Genre'], inplace=True)
+
+median_ratings = df.groupby(['Genre'])['Rating'].median()
+df['Rating'] = df.apply(lambda row: median_ratings.loc[(row['Genre'])] if pd.isna(row['Rating']) else row['Rating'], axis=1)
+
+df['Field6'] = df['Field6'].str.replace('K', '').astype(float) * 1000
+df['Field6'] = df.groupby('Genre')['Field6'].transform(lambda x: x.fillna(x.median()))
+df.rename(columns={'Field6': 'VoteCount'}, inplace=True)
+
+df['Rewiev_Count'] = df.groupby('Genre')['Rewiev_Count'].transform(lambda x: x.fillna(x.median()))
+df['Rewiev_Count'].fillna(0, inplace=True)
+df.rename(columns={'Rewiev_Count': 'Review_Count'}, inplace=True)
+
+df['EpisodeCount'] = pd.to_numeric(df['EpisodeCount'], errors='coerce')
+median_ratings = df.groupby(['Seasons'])['EpisodeCount'].median()
+df['EpisodeCount'] = df.apply(lambda row: median_ratings.loc[(row['Seasons'])] if pd.isna(row['EpisodeCount']) else row['EpisodeCount'], axis=1)
+
+df["EpsPerSeason"] = df['EpisodeCount'] / df['Seasons']
+df["EpsPerSeason"] = df["EpsPerSeason"].round()
+
+#### Kullanılmayan kolonların silinmesi
+will_be_deleted= ['Story_Line', 'Genre_Long', 'Location', 'Production','Field1_links','Field3_links','Field4_links','Field9_links','Sound','Popularity','Stars']
+df.drop(columns=will_be_deleted, inplace=True)
+df.drop(columns='Field9_links', inplace=True)
+############ Tür ayırma
+
+genre_counts = df['Genre'].value_counts()
+
+# Çubuk grafik oluştur
+plt.figure(figsize=(20,8))
+plt.xticks(rotation=45, ha="right")
+plt.bar(genre_counts.index, genre_counts.values)
+plt.xlabel('Genre')
+plt.xticks(fontsize=8)
+plt.ylabel('Frekans')
+plt.title('Dizi Türleri Sayıları')
+plt.show()
+######
+
+genre_encoded = pd.get_dummies(df['Genre'])
+
+# Toplamda 27'ten az frekansta bulunan sınıfları "others" adında bir sınıfta topladık
+threshold = 27
+genre_counts = df['Genre'].value_counts()
+rare_genres = genre_counts[genre_counts < threshold].index
+genre_encoded['others'] = df['Genre'].apply(lambda x: 1 if x in rare_genres else 0)
+
+
+result_df = pd.concat([df, genre_encoded], axis=1)
+result_df = result_df.drop('Genre', axis=1)
+print(result_df)
+
+df = pd.concat([df, genre_encoded], axis=1)
+df = df.drop('Genre', axis=1)
+print(df)
+
+################### başlangıç bitiş
+
+df['Years']
+df['baslangic'] = df['Years'].astype(str).apply(lambda x: x[:4])
+df['baslangic'] = pd.to_datetime(df['baslangic'])
+df['baslangic'] = df['baslangic'].astype(int)
+df['isFinal'] = df['Years'].apply(lambda x: 1 if len(str(x)) > 6 else 0)
+
+################## sezon bilgisi
+
+yeni_liste = []
+for eleman in df['Seasons']:
+    try:
+
+        eleman_parcalari = eleman.split('\n')
+
+
+        if len(eleman_parcalari[0]) == 2:
+            yeni_liste.append(eleman_parcalari[:1])
+        else:
+
+            yeni_liste.append([eleman_parcalari[0]])
+    except (IndexError, AttributeError):
+
+        yeni_liste.append([])
+
+df['Seasons'] = yeni_liste
+
+for i in range(len(df["Seasons"])):
+    df["Seasons"][i] = df["Seasons"][i][0].replace('[', '').replace(']', '') if len(df["Seasons"][i]) > 0 else ''
+
+
+df.dropna(subset=['Genre', 'baslangic'], inplace=True)
+df['Seasons'] = df['Seasons'].replace('', np.nan)
+df['Seasons'] = df.groupby(['Genre'])['Seasons'].transform(lambda x: x.fillna(x.median().round()))
+
+df['Seasons'] = pd.to_numeric(df['Seasons'])
+
+def label_class(season):
+    if season == 1:
+        return 1
+    elif season == 2:
+        return 2
+    elif 3 <= season <= 5:
+        return 3
+    elif 5 < season <= 10:
+        return 4
+    else:
+        return 5
+
+
+df['Sınıf'] = df['Seasons'].apply(label_class)
+
+df.dropna(subset=['Seasons'], inplace=True)
 
 ################### TF - IDF Matrisi Oluşturma ve Değişken Türetimi
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -217,108 +401,7 @@ plt.show()
 #########################
 
 
-##############
-# Veri İnceleme - Kontrol Aşaması
-##############
 
-def check_df(dataframe, head=5, tail=5, quan=False):
-    print("##################### İnfo #####################")
-    print(dataframe.info())
-    print("##################### Shape #####################")
-    print(dataframe.shape)
-    print("##################### Types #####################")
-    print(dataframe.dtypes)
-    print("##################### Head #####################")
-    print(dataframe.head(head))
-    print("##################### Tail #####################")
-    print(dataframe.tail(tail))
-    print("##################### NA #####################")
-    print(dataframe.isnull().sum())
-
-    if quan:
-        print("##################### Quantiles #####################")
-        print(dataframe.quantile([0, 0.05, 0.50, 0.95, 0.99, 1]).T)
-
-check_df(df, quan=True)
-
-df.isnull().sum()
-
-missing_percentage = df.isnull().sum() * 100 / len(df)
-
-def grab_col_names(dataframe, cat_th=5, car_th=20):
-    """
-    grab_col_names for given dataframe
-
-    :param dataframe:
-    :param cat_th:
-    :param car_th:
-    :return:
-    """
-
-    cat_cols = [col for col in dataframe.columns if dataframe[col].dtypes == "O"]
-
-    num_but_cat = [col for col in dataframe.columns if dataframe[col].nunique() < cat_th and
-                   dataframe[col].dtypes != "O"]
-
-    cat_but_car = [col for col in dataframe.columns if dataframe[col].nunique() > car_th and
-                   dataframe[col].dtypes == "O"]
-
-    cat_cols = cat_cols + num_but_cat
-    cat_cols = [col for col in cat_cols if col not in cat_but_car]
-
-    num_cols = [col for col in dataframe.columns if dataframe[col].dtypes != "O"]
-    num_cols = [col for col in num_cols if col not in num_but_cat]
-
-    print(f"Observations: {dataframe.shape[0]}")
-    print(f"Variables: {dataframe.shape[1]}")
-    print(f'cat_cols: {len(cat_cols)}')
-    print(f'num_cols: {len(num_cols)}')
-    print(f'cat_but_car: {len(cat_but_car)}')
-    print(f'num_but_cat: {len(num_but_cat)}')
-
-    # cat_cols + num_cols + cat_but_car = değişken sayısı.
-    # num_but_cat cat_cols'un içerisinde zaten.
-    # dolayısıyla tüm şu 3 liste ile tüm değişkenler seçilmiş olacaktır: cat_cols + num_cols + cat_but_car
-    # num_but_cat sadece raporlama için verilmiştir.
-
-    return cat_cols, cat_but_car, num_cols
-
-cat_cols, cat_but_car, num_cols = grab_col_names(df)
-
-###### Boş değerleri doldurma, Veri düzenleme
-
-df['Age'] = pd.to_numeric(df['Age'], errors='coerce')
-df['Age'].fillna(7, inplace=True)
-# df['Age'] = df['Age'].str.extract('(\d+)')
-
-df.dropna(subset=['Years'], inplace=True)
-df.dropna(subset=['Genre'], inplace=True)
-
-median_ratings = df.groupby(['Genre'])['Rating'].median()
-df['Rating'] = df.apply(lambda row: median_ratings.loc[(row['Genre'])] if pd.isna(row['Rating']) else row['Rating'], axis=1)
-
-df['Field6'] = df['Field6'].str.replace('K', '').astype(float) * 1000
-df['Field6'] = df.groupby('Genre')['Field6'].transform(lambda x: x.fillna(x.median()))
-df.rename(columns={'Field6': 'VoteCount'}, inplace=True)
-
-df['Rewiev_Count'] = df.groupby('Genre')['Rewiev_Count'].transform(lambda x: x.fillna(x.median()))
-df['Rewiev_Count'].fillna(0, inplace=True)
-df.rename(columns={'Rewiev_Count': 'Review_Count'}, inplace=True)
-
-df['EpisodeCount'] = pd.to_numeric(df['EpisodeCount'], errors='coerce')
-median_ratings = df.groupby(['Seasons'])['EpisodeCount'].median()
-df['EpisodeCount'] = df.apply(lambda row: median_ratings.loc[(row['Seasons'])] if pd.isna(row['EpisodeCount']) else row['EpisodeCount'], axis=1)
-
-df["EpsPerSeason"] = df['EpisodeCount'] / df['Seasons']
-df["EpsPerSeason"] = df["EpsPerSeason"].round()
-
-#### Kullanılmayan kolonların silinmesi
-will_be_deleted= ['Story_Line', 'Genre_Long', 'Location', 'Production','Field1_links','Field3_links','Field4_links','Field9_links','Sound','Popularity','Stars']
-df.drop(columns=will_be_deleted, inplace=True)
-df.drop(columns='Field9_links', inplace=True)
-############ Tür ayırma
-
-genre_counts = df['Genre'].value_counts()
 
 
 #Outlier Detection Adımı
