@@ -284,3 +284,38 @@ def grab_col_names(dataframe, cat_th=5, car_th=20):
     return cat_cols, cat_but_car, num_cols
 
 cat_cols, cat_but_car, num_cols = grab_col_names(df)
+
+###### Boş değerleri doldurma, Veri düzenleme
+
+df['Age'] = pd.to_numeric(df['Age'], errors='coerce')
+df['Age'].fillna(7, inplace=True)
+# df['Age'] = df['Age'].str.extract('(\d+)')
+
+df.dropna(subset=['Years'], inplace=True)
+df.dropna(subset=['Genre'], inplace=True)
+
+median_ratings = df.groupby(['Genre'])['Rating'].median()
+df['Rating'] = df.apply(lambda row: median_ratings.loc[(row['Genre'])] if pd.isna(row['Rating']) else row['Rating'], axis=1)
+
+df['Field6'] = df['Field6'].str.replace('K', '').astype(float) * 1000
+df['Field6'] = df.groupby('Genre')['Field6'].transform(lambda x: x.fillna(x.median()))
+df.rename(columns={'Field6': 'VoteCount'}, inplace=True)
+
+df['Rewiev_Count'] = df.groupby('Genre')['Rewiev_Count'].transform(lambda x: x.fillna(x.median()))
+df['Rewiev_Count'].fillna(0, inplace=True)
+df.rename(columns={'Rewiev_Count': 'Review_Count'}, inplace=True)
+
+df['EpisodeCount'] = pd.to_numeric(df['EpisodeCount'], errors='coerce')
+median_ratings = df.groupby(['Seasons'])['EpisodeCount'].median()
+df['EpisodeCount'] = df.apply(lambda row: median_ratings.loc[(row['Seasons'])] if pd.isna(row['EpisodeCount']) else row['EpisodeCount'], axis=1)
+
+df["EpsPerSeason"] = df['EpisodeCount'] / df['Seasons']
+df["EpsPerSeason"] = df["EpsPerSeason"].round()
+
+#### Kullanılmayan kolonların silinmesi
+will_be_deleted= ['Story_Line', 'Genre_Long', 'Location', 'Production','Field1_links','Field3_links','Field4_links','Field9_links','Sound','Popularity','Stars']
+df.drop(columns=will_be_deleted, inplace=True)
+df.drop(columns='Field9_links', inplace=True)
+############ Tür ayırma
+
+genre_counts = df['Genre'].value_counts()
