@@ -211,6 +211,23 @@ df['Sınıf'] = df['Seasons'].apply(label_class)
 
 df.dropna(subset=['Seasons'], inplace=True)
 
+################# Süre düzenleme
+
+def convert_to_minutes(duration):
+    if isinstance(duration, (int, float)):
+        return duration
+    total_minutes = 0
+    for pair in duration.split():
+        num, unit = pair[:-1], pair[-1]
+        total_minutes += int(num) * (60 if unit == 'h' else 1)
+    return total_minutes
+
+df['Duration'] = df['Duration'].apply(convert_to_minutes)
+
+mean_duration = df['Duration'].mean()
+rounded_mean_duration = round(mean_duration)
+df['Duration'].fillna(rounded_mean_duration, inplace=True)
+
 ################### TF - IDF Matrisi Oluşturma ve Değişken Türetimi
 from sklearn.feature_extraction.text import TfidfVectorizer
 import pandas as pd
@@ -308,8 +325,190 @@ df['Basrol_Class2'] = df.apply(lambda row: 1 if any(star in sinif_1_listesi for 
 df['Basrol_Class3'] = df.apply(lambda row: 1 if any(star in sinif_2_listesi for star in row) else 0, axis=1)
 df['Basrol_Class4'] = df.apply(lambda row: 1 if any(star in sinif_3_listesi for star in row) else 0, axis=1)
 
+#Outlier Detection Adımı
+###################
+
+def outlier_thresholds(dataframe, variable, low_quantile=0, up_quantile=0.85):
+    quantile_one = dataframe[variable].quantile(low_quantile)
+    quantile_three = dataframe[variable].quantile(up_quantile)
+    interquantile_range = quantile_three - quantile_one
+    up_limit = quantile_three + 1.5 * interquantile_range
+    low_limit = quantile_one - 1.5 * interquantile_range
+    return low_limit, up_limit
+
+# Aykırı değer kontrolü
+def check_outlier(dataframe, col_name):
+    low_limit, up_limit = outlier_thresholds(dataframe, col_name)
+    if dataframe[(dataframe[col_name] > up_limit) | (dataframe[col_name] < low_limit)].any(axis=None):
+        return True
+    else:
+        return False
+
+
+for col in num_cols:
+    if col in df.columns:
+        print(col, check_outlier(df, col))
+
+
+df["EpsPerSeason"].describe().T
+
+# Aykırı değerlerin baskılanması
+def replace_with_thresholds(dataframe, variable):
+    low_limit, up_limit = outlier_thresholds(dataframe, variable)
+    dataframe.loc[(dataframe[variable] < low_limit), variable] = low_limit
+    dataframe.loc[(dataframe[variable] > up_limit), variable] = up_limit
+
+
+for col in num_cols:
+    replace_with_thresholds(df,col)
+
+df.head()
+
+############# Korelasyon Matrisini Hesaplama ###############
+correlation_matrix = df.corr()
+
+plt.figure(figsize=(12, 10))
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f", linewidths=0.5)
+plt.title("Korelasyon Matrisi")
+plt.show()
+
+########################################################33
+#########FİNAL DATA CSV FORMATINDA ALINMASI ###################3
+#########################################################
+
+df.to_csv('/Users/Furkan/Desktop/FinalDiziler2.csv', index=True)
+df = pd.read_csv("/Users/Furkan/Desktop/FinalDiziler.csv")
+
+df.columns.tolist()
+df["baslangic"].describe().T
+#########################3
+# Model ve Test Başarısı Ölçme Aşaması
+##########################
+
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import accuracy_score, classification_report
+
+def evaluate_model(train_data, test_data):
+    features = ['Age',
+                'Duration',
+                'VoteCount',
+                'Review_Count',
+                'EpisodeCount',
+                'baslangic',
+                'isFinal',
+                'EpsPerSeason',
+                'Action',
+                'Adventure',
+                'Animation',
+                'Biography',
+                'Comedy',
+                'Crime',
+                'Documentary',
+                'Drama',
+                'Family',
+                'Game-Show',
+                'History',
+                'Music',
+                'News',
+                'Reality-TV',
+                'Romance',
+                'Sci-Fi',
+                'Short',
+                'Sport',
+                'Talk-Show',
+                'others',
+                'HasLove',
+                'HasFamily',
+                'HasIstanbul',
+                'Basrol_Class1',
+                'Basrol_Class2',
+                'Basrol_Class3',
+                'Basrol_Class4']
+
+    target = 'Sınıf'
+
+    X_train, y_train = train_data[features], train_data[target]
+    X_test, y_test = test_data[features], test_data[target]
+
+    model = DecisionTreeClassifier(random_state=42)
+    model.fit(X_train, y_train)
+
+    y_pred = model.predict(X_test)
+
+    accuracy = accuracy_score(y_test, y_pred)
+
+
+    importances = model.feature_importances_
+
+    return accuracy, importances
+
+year_cumulative_accuracy = {}
+individual_accuracies = {}
+
+for year in range(1974, 2024):
+    train_data = df[df['baslangic'] < year]
+    test_data = df[df['baslangic'] == year]
+
+    if not test_data.empty and not train_data.empty:
+        accuracy, report = evaluate_model(train_data, test_data)
+
+        cumulative_accuracy += accuracy
+        cumulative_accuracies = []
+        cumulative_accuracies.append(accuracy)
+        cumulative_report += f"Sınamanın Yılı: {year}\nDoğruluk: {accuracy}\n{'='*40}\n"
+
+        year_cumulative_accuracy[year] = cumulative_accuracy
+        individual_accuracies[year] = accuracy
+
+        years = list(year_cumulative_accuracy.keys())
+        accuracies = list(year_cumulative_accuracy.values())
+    else:
+        individual_accuracies[year] = None
+
+average_accuracy = cumulative_accuracy / len(range(1974, 2024))
+
+print(f"Kümülatif Ortalama Doğruluk: {average_accuracy}")
+
+
+print(cumulative_report)
+
+plt.plot(years, accuracies, marker='o', label='Kümülatif Doğruluk')
+plt.xlabel('Yıl')
+plt.ylabel('Kümülatif Doğruluk')
+plt.title('Yıla Göre Kümülatif Doğruluk')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+individual_years = list(individual_accuracies.keys())
+individual_values = list(individual_accuracies.values())
+
+plt.plot(individual_years, individual_values, marker='o', label='Yıllara Göre Doğruluk')
+plt.xlabel('Yıl')
+plt.ylabel('Doğruluk')
+plt.title('Her Yılın Doğruluk Değerleri')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+plt.figure(figsize=(8, 5))
+feature_names = ['Başlangıç Yılı', 'Sezon Sayısı', 'Toplam Bölüm Sayısı']
+plt.bar(feature_names, cumulative_importances[-1])  # Sadece en son sınavın feature importancelarını kullanıyoruz
+plt.xlabel('Özellikler')
+plt.ylabel('Feature Importance')
+plt.title('En Son Sınavın Feature Importanceları')
+plt.grid(True)
+
+plt.tight_layout()
+plt.show()
+
 #########################################
-#Karar Ağacı Modeli
+
+
+#########################
+
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score
 import matplotlib.pyplot as plt
@@ -398,56 +597,148 @@ plt.legend()
 plt.grid(True)
 plt.show()
 
-#########################
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import RandomizedSearchCV
+from sklearn.metrics import make_scorer, accuracy_score
+
+features = ['Age', 'Duration', 'VoteCount', 'Review_Count', 'EpisodeCount', 'baslangic', 'isFinal', 'EpsPerSeason',
+            'Action', 'Adventure', 'Animation', 'Biography', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Family',
+            'Game-Show', 'History', 'Music', 'News', 'Reality-TV', 'Romance', 'Sci-Fi', 'Short', 'Sport', 'Talk-Show',
+            'others', 'HasLove', 'HasFamily', 'HasIstanbul', 'Basrol_Class1', 'Basrol_Class2', 'Basrol_Class3',
+            'Basrol_Class4']
+
+target = 'Sınıf'
 
 
+param_dist = {
+    'criterion': ['gini', 'entropy'],
+    'splitter': ['best', 'random'],
+    'max_depth': [None, 10, 20, 30, 40, 50],
+    'min_samples_split': [2, 5, 10],
+    'min_samples_leaf': [1, 2, 4],
+    'max_features': ['auto', 'sqrt', 'log2', None]
+}
 
 
+base_model = DecisionTreeClassifier(random_state=42)
 
-#Outlier Detection Adımı
-###################
 
-def outlier_thresholds(dataframe, variable, low_quantile=0, up_quantile=0.85):
-    quantile_one = dataframe[variable].quantile(low_quantile)
-    quantile_three = dataframe[variable].quantile(up_quantile)
-    interquantile_range = quantile_three - quantile_one
-    up_limit = quantile_three + 1.5 * interquantile_range
-    low_limit = quantile_one - 1.5 * interquantile_range
-    return low_limit, up_limit
+random_search = RandomizedSearchCV(
+    base_model, param_distributions=param_dist, n_iter=100,
+    scoring=make_scorer(accuracy_score),
+    cv=5, verbose=1, n_jobs=-1, random_state=42
+)
 
-# Aykırı değer kontrolü
-def check_outlier(dataframe, col_name):
-    low_limit, up_limit = outlier_thresholds(dataframe, col_name)
-    if dataframe[(dataframe[col_name] > up_limit) | (dataframe[col_name] < low_limit)].any(axis=None):
-        return True
+
+X_train, y_train = train_data[features], train_data[target]
+
+
+random_search.fit(X_train, y_train)
+
+
+best_model = random_search.best_estimator_
+
+
+print("En iyi parametreler:", random_search.best_params_)
+print("En iyi skor:", random_search.best_score_)
+
+
+X_test, y_test = test_data[features], test_data[target]
+y_pred = best_model.predict(X_test)
+accuracy = accuracy_score(y_test, y_pred)
+print("En iyi modelle test doğruluğu:", accuracy)
+
+#################################
+
+from sklearn.ensemble import RandomForestClassifier
+
+def evaluate_model_RandomF(train_data, test_data):
+    features = ['Age', 'Duration', 'VoteCount', 'Review_Count', 'EpisodeCount', 'EpsPerSeason', 'Action', 'Adventure', 'Animation', 'Biography', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Family', 'Game-Show', 'History', 'Music', 'News', 'Reality-TV', 'Romance', 'Sci-Fi', 'Short', 'Sport', 'Talk-Show', 'others', 'HasLove', 'HasFamily', 'HasIstanbul', 'Basrol_Class1', 'Basrol_Class2', 'Basrol_Class3', 'Basrol_Class4']
+
+    target = 'Sınıf'
+
+    X_train, y_train = train_data[features], train_data[target]
+    X_test, y_test = test_data[features], test_data[target]
+
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
+
+    y_pred = model.predict(X_test)
+
+    accuracy = accuracy_score(y_test, y_pred)
+
+    importances = model.feature_importances_
+
+    return accuracy, importances
+
+
+cumulative_accuracy = 0
+cumulative_importances = []
+cumulative_report = ""
+
+year_cumulative_accuracy = {}
+individual_accuracies = {}
+
+for year in range(1974, 2024):
+    train_data = df[df['baslangic'] < year]
+    test_data = df[df['baslangic'] == year]
+
+    if not test_data.empty and not train_data.empty:
+        accuracy, importances = evaluate_model_RandomF(train_data, test_data)
+
+        cumulative_accuracy += accuracy
+        cumulative_importances.append(importances)
+        cumulative_report += f"Sınamanın Yılı: {year}\nDoğruluk: {accuracy}\n{'='*40}\n"
+
+        year_cumulative_accuracy[year] = cumulative_accuracy
+        individual_accuracies[year] = accuracy
     else:
-        return False
+        individual_accuracies[year] = None
 
+average_accuracy = cumulative_accuracy / len(range(1974, 2024))
 
-for col in num_cols:
-    if col in df.columns:
-        print(col, check_outlier(df, col))
+print(f"Kümülatif Ortalama Doğruluk: {average_accuracy}")
 
+print(cumulative_report)
 
-df["EpsPerSeason"].describe().T
+cumulative_importances = pd.DataFrame(cumulative_importances, columns=features)
+cumulative_importances = cumulative_importances.mean()
+cumulative_importances = cumulative_importances / cumulative_importances.sum()
 
-# Aykırı değerlerin baskılanması
-def replace_with_thresholds(dataframe, variable):
-    low_limit, up_limit = outlier_thresholds(dataframe, variable)
-    dataframe.loc[(dataframe[variable] < low_limit), variable] = low_limit
-    dataframe.loc[(dataframe[variable] > up_limit), variable] = up_limit
-
-
-for col in num_cols:
-    replace_with_thresholds(df,col)
-
-df.head()
-
-############# Korelasyon Matrisini Hesaplama ###############
-correlation_matrix = df.corr()
-
-plt.figure(figsize=(12, 10))
-sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f", linewidths=0.5)
-plt.title("Korelasyon Matrisi")
+plt.figure(figsize=(8, 5))
+plt.bar(features, cumulative_importances)
+plt.xlabel('Özellikler')
+plt.ylabel('Feature Importance')
+plt.title('Kümülatif Feature Importanceları')
+plt.grid(True)
+plt.xticks(rotation=90)
+plt.tight_layout()
 plt.show()
+
+plt.plot(years, accuracies, marker='o', label='Kümülatif Doğruluk')
+plt.xlabel('Yıl')
+plt.ylabel('Kümülatif Doğruluk')
+plt.title('Yıla Göre Kümülatif Doğruluk')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+individual_years = list(individual_accuracies.keys())
+individual_values = list(individual_accuracies.values())
+
+plt.plot(individual_years, individual_values, marker='o', label='Yıllara Göre Doğruluk')
+plt.xlabel('Yıl')
+plt.ylabel('Doğruluk')
+plt.title('Her Yılın Doğruluk Değerleri')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+
+
+
+
+
+
+
 
