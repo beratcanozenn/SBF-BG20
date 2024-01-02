@@ -319,3 +319,52 @@ df.drop(columns='Field9_links', inplace=True)
 ############ Tür ayırma
 
 genre_counts = df['Genre'].value_counts()
+
+
+#Outlier Detection Adımı
+###################
+
+def outlier_thresholds(dataframe, variable, low_quantile=0, up_quantile=0.85):
+    quantile_one = dataframe[variable].quantile(low_quantile)
+    quantile_three = dataframe[variable].quantile(up_quantile)
+    interquantile_range = quantile_three - quantile_one
+    up_limit = quantile_three + 1.5 * interquantile_range
+    low_limit = quantile_one - 1.5 * interquantile_range
+    return low_limit, up_limit
+
+# Aykırı değer kontrolü
+def check_outlier(dataframe, col_name):
+    low_limit, up_limit = outlier_thresholds(dataframe, col_name)
+    if dataframe[(dataframe[col_name] > up_limit) | (dataframe[col_name] < low_limit)].any(axis=None):
+        return True
+    else:
+        return False
+
+
+for col in num_cols:
+    if col in df.columns:
+        print(col, check_outlier(df, col))
+
+
+df["EpsPerSeason"].describe().T
+
+# Aykırı değerlerin baskılanması
+def replace_with_thresholds(dataframe, variable):
+    low_limit, up_limit = outlier_thresholds(dataframe, variable)
+    dataframe.loc[(dataframe[variable] < low_limit), variable] = low_limit
+    dataframe.loc[(dataframe[variable] > up_limit), variable] = up_limit
+
+
+for col in num_cols:
+    replace_with_thresholds(df,col)
+
+df.head()
+
+############# Korelasyon Matrisini Hesaplama ###############
+correlation_matrix = df.corr()
+
+plt.figure(figsize=(12, 10))
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f", linewidths=0.5)
+plt.title("Korelasyon Matrisi")
+plt.show()
+
