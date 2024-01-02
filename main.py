@@ -734,7 +734,21 @@ plt.legend()
 plt.grid(True)
 plt.show()
 
+################### ÖRNEK TAHMİN İŞLEMİ YAPILMASI ################
 
+train_data = df[df['baslangic'] < 2024]
+test_data = df[df['baslangic'] == 2024]
+
+model = DecisionTreeClassifier(random_state=42)
+model.fit(train_data[features], train_data[target])
+accuracy, importances = evaluate_model(train_data, test_data)
+
+
+random_input = pd.DataFrame(np.random.rand(1, len(features)), columns=features)
+
+predicted_class = model.predict(random_input)
+
+print(f"Predicted Class for Random Input: {predicted_class}")
 
 
 
