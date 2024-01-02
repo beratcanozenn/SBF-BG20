@@ -215,3 +215,72 @@ plt.grid(True)
 plt.show()
 
 #########################
+
+
+##############
+# Veri İnceleme - Kontrol Aşaması
+##############
+
+def check_df(dataframe, head=5, tail=5, quan=False):
+    print("##################### İnfo #####################")
+    print(dataframe.info())
+    print("##################### Shape #####################")
+    print(dataframe.shape)
+    print("##################### Types #####################")
+    print(dataframe.dtypes)
+    print("##################### Head #####################")
+    print(dataframe.head(head))
+    print("##################### Tail #####################")
+    print(dataframe.tail(tail))
+    print("##################### NA #####################")
+    print(dataframe.isnull().sum())
+
+    if quan:
+        print("##################### Quantiles #####################")
+        print(dataframe.quantile([0, 0.05, 0.50, 0.95, 0.99, 1]).T)
+
+check_df(df, quan=True)
+
+df.isnull().sum()
+
+missing_percentage = df.isnull().sum() * 100 / len(df)
+
+def grab_col_names(dataframe, cat_th=5, car_th=20):
+    """
+    grab_col_names for given dataframe
+
+    :param dataframe:
+    :param cat_th:
+    :param car_th:
+    :return:
+    """
+
+    cat_cols = [col for col in dataframe.columns if dataframe[col].dtypes == "O"]
+
+    num_but_cat = [col for col in dataframe.columns if dataframe[col].nunique() < cat_th and
+                   dataframe[col].dtypes != "O"]
+
+    cat_but_car = [col for col in dataframe.columns if dataframe[col].nunique() > car_th and
+                   dataframe[col].dtypes == "O"]
+
+    cat_cols = cat_cols + num_but_cat
+    cat_cols = [col for col in cat_cols if col not in cat_but_car]
+
+    num_cols = [col for col in dataframe.columns if dataframe[col].dtypes != "O"]
+    num_cols = [col for col in num_cols if col not in num_but_cat]
+
+    print(f"Observations: {dataframe.shape[0]}")
+    print(f"Variables: {dataframe.shape[1]}")
+    print(f'cat_cols: {len(cat_cols)}')
+    print(f'num_cols: {len(num_cols)}')
+    print(f'cat_but_car: {len(cat_but_car)}')
+    print(f'num_but_cat: {len(num_but_cat)}')
+
+    # cat_cols + num_cols + cat_but_car = değişken sayısı.
+    # num_but_cat cat_cols'un içerisinde zaten.
+    # dolayısıyla tüm şu 3 liste ile tüm değişkenler seçilmiş olacaktır: cat_cols + num_cols + cat_but_car
+    # num_but_cat sadece raporlama için verilmiştir.
+
+    return cat_cols, cat_but_car, num_cols
+
+cat_cols, cat_but_car, num_cols = grab_col_names(df)
