@@ -123,3 +123,95 @@ df['Basrol_Class1'] = df.apply(lambda row: 1 if any(star in sinif_0_listesi for 
 df['Basrol_Class2'] = df.apply(lambda row: 1 if any(star in sinif_1_listesi for star in row) else 0, axis=1)
 df['Basrol_Class3'] = df.apply(lambda row: 1 if any(star in sinif_2_listesi for star in row) else 0, axis=1)
 df['Basrol_Class4'] = df.apply(lambda row: 1 if any(star in sinif_3_listesi for star in row) else 0, axis=1)
+
+#########################################
+#Karar Ağacı Modeli
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import accuracy_score
+import matplotlib.pyplot as plt
+import pandas as pd
+
+def evaluate_model(train_data, test_data):
+    features = ['Age', 'Duration', 'VoteCount', 'Review_Count', 'baslangic', 'EpsPerSeason', 'Action', 'Adventure', 'Animation', 'Biography', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Family', 'Game-Show', 'History', 'Music', 'News', 'Reality-TV', 'Romance', 'Sci-Fi', 'Short', 'Sport', 'Talk-Show', 'others', 'HasLove', 'HasFamily', 'HasIstanbul', 'Basrol_Class1', 'Basrol_Class2', 'Basrol_Class3', 'Basrol_Class4']
+
+    target = 'Sınıf'
+
+    X_train, y_train = train_data[features], train_data[target]
+    X_test, y_test = test_data[features], test_data[target]
+
+    model = DecisionTreeClassifier(random_state=42)
+    model.fit(X_train, y_train)
+
+    y_pred = model.predict(X_test)
+
+    accuracy = accuracy_score(y_test, y_pred)
+
+
+    importances = model.feature_importances_
+
+    return accuracy, importances
+
+
+cumulative_accuracy = 0
+cumulative_importances = []
+cumulative_report = ""
+
+year_cumulative_accuracy = {}
+individual_accuracies = {}
+
+for year in range(1974, 2024):
+    train_data = df[df['baslangic'] < year]
+    test_data = df[df['baslangic'] == year]
+
+    if not test_data.empty and not train_data.empty:
+        accuracy, importances = evaluate_model(train_data, test_data)
+
+        cumulative_accuracy += accuracy
+        cumulative_importances.append(importances)
+        cumulative_report += f"Sınamanın Yılı: {year}\nDoğruluk: {accuracy}\n{'='*40}\n"
+
+        year_cumulative_accuracy[year] = cumulative_accuracy
+        individual_accuracies[year] = accuracy
+    else:
+        individual_accuracies[year] = None
+
+average_accuracy = cumulative_accuracy / len(range(1974, 2024))
+
+print(f"Kümülatif Ortalama Doğruluk: {average_accuracy}")
+
+print(cumulative_report)
+
+cumulative_importances = pd.DataFrame(cumulative_importances, columns=features)
+cumulative_importances = cumulative_importances.mean()
+cumulative_importances = cumulative_importances / cumulative_importances.sum()
+
+plt.figure(figsize=(8, 5))
+plt.bar(features, cumulative_importances)
+plt.xlabel('Özellikler')
+plt.ylabel('Feature Importance')
+plt.title('Kümülatif Feature Importanceları')
+plt.grid(True)
+plt.xticks(rotation=90)
+plt.tight_layout()
+plt.show()
+
+plt.plot(years, accuracies, marker='o', label='Kümülatif Doğruluk')
+plt.xlabel('Yıl')
+plt.ylabel('Kümülatif Doğruluk')
+plt.title('Yıla Göre Kümülatif Doğruluk')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+individual_years = list(individual_accuracies.keys())
+individual_values = list(individual_accuracies.values())
+
+plt.plot(individual_years, individual_values, marker='o', label='Yıllara Göre Doğruluk')
+plt.xlabel('Yıl')
+plt.ylabel('Doğruluk')
+plt.title('Her Yılın Doğruluk Değerleri')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+#########################
